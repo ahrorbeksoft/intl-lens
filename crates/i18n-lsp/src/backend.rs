@@ -32,7 +32,10 @@ impl I18nBackend {
     }
 
     async fn initialize_workspace(&self, root: PathBuf) {
+        tracing::info!("Initializing workspace at {:?}", root);
+        
         let config = I18nConfig::load_from_workspace(&root);
+        tracing::info!("Config loaded, locale_paths: {:?}", config.locale_paths);
         
         let key_finder = KeyFinder::new(&config.function_patterns);
         *self.key_finder.write().await = key_finder;
@@ -43,13 +46,17 @@ impl I18nBackend {
         let locales = store.get_locales();
         let keys = store.get_all_keys();
         
+        tracing::info!("Found {} locales: {:?}", locales.len(), locales);
+        tracing::info!("Found {} translation keys", keys.len());
+        
         self.client
             .log_message(
                 MessageType::INFO,
                 format!(
-                    "i18n-lsp initialized: {} locales, {} keys",
+                    "i18n-lsp initialized: {} locales, {} keys in {:?}",
                     locales.len(),
-                    keys.len()
+                    keys.len(),
+                    root
                 ),
             )
             .await;
@@ -210,10 +217,24 @@ impl I18nBackend {
 #[tower_lsp::async_trait]
 impl LanguageServer for I18nBackend {
     async fn initialize(&self, params: InitializeParams) -> Result<InitializeResult> {
-        if let Some(root_uri) = params.root_uri {
-            if let Ok(root_path) = root_uri.to_file_path() {
-                self.initialize_workspace(root_path).await;
-            }
+        tracing::info!("i18n-lsp initialize called");
+        
+        let root_path = params
+            .workspace_folders
+            .as_ref()
+            .and_then(|folders| folders.first())
+            .and_then(|folder| folder.uri.to_file_path().ok())
+            .or_else(|| {
+                params
+                    .root_uri
+                    .as_ref()
+                    .and_then(|uri| uri.to_file_path().ok())
+            });
+
+        if let Some(root) = root_path {
+            self.initialize_workspace(root).await;
+        } else {
+            tracing::warn!("No workspace root found in initialize params");
         }
 
         Ok(InitializeResult {
