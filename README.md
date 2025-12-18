@@ -1,171 +1,204 @@
-# zed-i18n
+<div align="center">
 
-🌍 Internationalization (i18n) support for [Zed Editor](https://zed.dev) - similar to [i18n-ally](https://github.com/lokalise/i18n-ally) but built for Zed using LSP.
+# 🌍 zed-i18n
 
-## Features
+**Finally, i18n-ally for Zed Editor.**
 
-- **Hover** - See translation values in all locales when hovering over i18n keys
-- **Diagnostics** - Warnings for missing translations and incomplete locale coverage
-- **Completions** - Autocomplete translation keys with preview
-- **Go-to-Definition** - Jump directly to translation files
+[![Rust](https://img.shields.io/badge/rust-1.70+-orange.svg)](https://www.rust-lang.org)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![Zed](https://img.shields.io/badge/zed-extension-purple.svg)](https://zed.dev)
 
-## Supported Frameworks
+Stop guessing what `t("common.buttons.submit")` means.<br/>
+**See translations inline. Catch missing keys instantly. Ship with confidence.**
 
-| Framework | Function Patterns |
-|-----------|-------------------|
-| react-i18next | `t("key")`, `<Trans i18nKey="key">` |
-| i18next | `t("key")`, `i18n.t("key")` |
-| vue-i18n | `$t("key")` |
-| react-intl | `formatMessage({ id: "key" })` |
+[Features](#-features) · [Install](#-installation) · [Configure](#-configuration) · [Contribute](#-contributing)
 
-## Installation
+</div>
 
-### Option 1: Install from Zed Extensions (Coming Soon)
+---
 
-Search for "i18n Ally" in Zed's extension marketplace.
+## ✨ Features
 
-### Option 2: Build from Source
+| Feature | Description |
+|---------|-------------|
+| 🔍 **Inline Hints** | See translation values right next to your i18n keys |
+| 💬 **Hover Preview** | View all locale translations in a beautiful popup |
+| ⚠️ **Missing Key Detection** | Get warnings for undefined translation keys |
+| 🌐 **Incomplete Coverage** | Know which locales are missing translations |
+| ⚡ **Autocomplete** | Type `t("` and get instant key suggestions with previews |
+| 🎯 **Go to Definition** | Jump directly to the translation in your locale file |
+| 🔄 **Auto Reload** | Changes to translation files are picked up automatically |
 
-```bash
-# Clone the repository
-git clone https://github.com/user/zed-i18n.git
-cd zed-i18n
+## 🎬 Demo
 
-# Build the LSP server
-cargo build --release -p i18n-lsp
+```tsx
+// Before: What does this even mean? 🤔
+<button>{t("common.actions.submit")}</button>
 
-# Add to PATH
-ln -sf $(pwd)/target/release/i18n-lsp ~/.local/bin/i18n-lsp
+// After: Crystal clear! ✨
+<button>{t("common.actions.submit")}</button>  // → Submit
 ```
 
-Then add to your Zed settings (`~/.config/zed/settings.json`):
+**Hover over any i18n key to see:**
+```
+🌍 common.actions.submit
 
-```json
+en: Submit
+vi: Gửi
+ja: 送信
+---
+```
+
+## 🚀 Installation
+
+### Quick Start (Build from Source)
+
+```bash
+git clone https://github.com/user/zed-i18n.git
+cd zed-i18n
+cargo build --release -p i18n-lsp
+ln -sf $(pwd)/target/release/i18n-lsp ~/.local/bin/
+```
+
+### Configure Zed
+
+Add to `~/.config/zed/settings.json`:
+
+```jsonc
 {
   "lsp": {
     "i18n-lsp": {
-      "binary": {
-        "path": "/path/to/i18n-lsp"
-      }
+      "binary": { "path": "i18n-lsp" }
     }
   },
   "languages": {
-    "TypeScript": {
-      "language_servers": ["typescript-language-server", "i18n-lsp", "..."]
-    },
     "TSX": {
       "language_servers": ["typescript-language-server", "i18n-lsp", "..."]
     },
-    "JavaScript": {
+    "TypeScript": {
       "language_servers": ["typescript-language-server", "i18n-lsp", "..."]
     }
   }
 }
 ```
 
-## Configuration
+**Restart Zed. Done. 🎉**
+
+## 🎯 Supported Frameworks
+
+Works out of the box with:
+
+| Framework | Patterns |
+|-----------|----------|
+| **react-i18next** | `t("key")` `useTranslation()` `<Trans i18nKey="key">` |
+| **i18next** | `t("key")` `i18n.t("key")` |
+| **vue-i18n** | `$t("key")` `t("key")` |
+| **react-intl** | `formatMessage({ id: "key" })` |
+| **Custom** | Configure your own patterns! |
+
+## ⚙️ Configuration
 
 Create `.i18n-ally.json` in your project root:
 
 ```json
 {
-  "localePaths": [
-    "src/locales",
-    "public/locales"
-  ],
-  "sourceLocale": "en",
-  "keyStyle": "nested"
+  "localePaths": ["src/locales", "public/locales"],
+  "sourceLocale": "en"
 }
 ```
 
-### Options
+<details>
+<summary><strong>📋 All Options</strong></summary>
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `localePaths` | `string[]` | `["locales", "i18n", ...]` | Directories containing translation files |
-| `sourceLocale` | `string` | `"en"` | Primary locale for translations |
-| `keyStyle` | `"nested" \| "flat" \| "auto"` | `"auto"` | Key format in translation files |
-| `namespaceEnabled` | `boolean` | `false` | Enable namespace support |
-| `functionPatterns` | `string[]` | (see below) | Regex patterns to detect i18n keys |
+| `localePaths` | `string[]` | `["locales", "i18n", ...]` | Where to find translation files |
+| `sourceLocale` | `string` | `"en"` | Your primary language |
+| `keyStyle` | `"nested" \| "flat"` | `"auto"` | JSON structure style |
+| `functionPatterns` | `string[]` | See below | Custom regex patterns |
 
-### Default Function Patterns
+</details>
+
+<details>
+<summary><strong>🔧 Custom Function Patterns</strong></summary>
 
 ```json
-[
-  "t\\s*\\(\\s*[\"']([^\"']+)[\"']",
-  "i18n\\.t\\s*\\(\\s*[\"']([^\"']+)[\"']",
-  "\\$t\\s*\\(\\s*[\"']([^\"']+)[\"']",
-  "formatMessage\\s*\\(\\s*\\{\\s*id:\\s*[\"']([^\"']+)[\"']",
-  "<Trans\\s+i18nKey\\s*=\\s*[\"']([^\"']+)[\"']"
-]
+{
+  "functionPatterns": [
+    "t\\s*\\(\\s*[\"']([^\"']+)[\"']",
+    "translate\\s*\\(\\s*[\"']([^\"']+)[\"']",
+    "i18n\\.get\\s*\\(\\s*[\"']([^\"']+)[\"']"
+  ]
+}
 ```
 
-## Translation File Structure
+</details>
 
-### Nested JSON (default)
+## 📁 Supported File Formats
 
+| Format | Extensions |
+|--------|------------|
+| JSON | `.json` |
+| YAML | `.yaml` `.yml` |
+
+**Nested structure:**
 ```
 locales/
 ├── en/
 │   └── common.json
-└── vi/
+├── vi/
+│   └── common.json
+└── ja/
     └── common.json
 ```
 
-```json
-{
-  "greeting": "Hello",
-  "buttons": {
-    "submit": "Submit",
-    "cancel": "Cancel"
-  }
-}
+**Or flat structure:**
+```
+locales/
+├── en.json
+├── vi.json
+└── ja.json
 ```
 
-### Flat JSON
-
-```json
-{
-  "greeting": "Hello",
-  "buttons.submit": "Submit",
-  "buttons.cancel": "Cancel"
-}
-```
-
-## Development
+## 🛠️ Development
 
 ```bash
-# Run tests
-cargo test
-
-# Build debug
-cargo build -p i18n-lsp
-
-# Build release
-cargo build --release -p i18n-lsp
+cargo test          # Run tests
+cargo build         # Debug build
+cargo build -r      # Release build
 
 # Run with debug logging
 RUST_LOG=debug ./target/release/i18n-lsp
 ```
 
-## Project Structure
+## 🤝 Contributing
 
-```
-zed-i18n/
-├── crates/
-│   ├── i18n-lsp/           # LSP server (Rust binary)
-│   │   └── src/
-│   │       ├── main.rs
-│   │       ├── backend.rs  # LSP handlers
-│   │       ├── config.rs   # Configuration
-│   │       └── i18n/       # Core i18n logic
-│   │           ├── parser.rs
-│   │           ├── store.rs
-│   │           └── key_finder.rs
-│   └── zed-i18n-extension/ # Zed extension (WASM)
-└── Cargo.toml
-```
+Contributions are welcome! Here's how:
 
-## License
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feat/amazing-feature`)
+3. Commit your changes (`git commit -m 'feat: add amazing feature'`)
+4. Push to the branch (`git push origin feat/amazing-feature`)
+5. Open a Pull Request
 
-MIT
+### Ideas for Contribution
+
+- [ ] Extract hardcoded strings to translation files
+- [ ] Support for more file formats (TOML, PO)
+- [ ] Namespace support for large projects
+- [ ] Translation file validation
+- [ ] Integration with translation services
+
+## 📄 License
+
+MIT © [Trong Nguyen](https://github.com/user)
+
+---
+
+<div align="center">
+
+**If this project helps you, consider giving it a ⭐**
+
+[Report Bug](https://github.com/user/zed-i18n/issues) · [Request Feature](https://github.com/user/zed-i18n/issues)
+
+</div>
