@@ -11,10 +11,10 @@ impl TranslationParser {
     pub fn parse_file(path: &Path) -> Result<HashMap<String, String>> {
         let content = std::fs::read_to_string(path)?;
         let extension = path.extension().and_then(|e| e.to_str()).unwrap_or("");
-        
+
         match extension {
             "yaml" | "yml" => Self::parse_yaml(&content),
-            "json" | _ => Self::parse_json(&content),
+            _ => Self::parse_json(&content),
         }
     }
 

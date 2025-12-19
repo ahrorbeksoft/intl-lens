@@ -45,10 +45,10 @@ impl I18nBackend {
 
     async fn initialize_workspace(&self, root: PathBuf) {
         tracing::info!("Initializing workspace at {:?}", root);
-        
+
         let config = I18nConfig::load_from_workspace(&root);
         tracing::info!("Config loaded, locale_paths: {:?}", config.locale_paths);
-        
+
         let key_finder = KeyFinder::new(&config.function_patterns);
         *self.key_finder.write().await = key_finder;
 
@@ -57,10 +57,10 @@ impl I18nBackend {
 
         let locales = store.get_locales();
         let keys = store.get_all_keys();
-        
+
         tracing::info!("Found {} locales: {:?}", locales.len(), locales);
         tracing::info!("Found {} translation keys", keys.len());
-        
+
         self.client
             .log_message(
                 MessageType::INFO,
@@ -80,7 +80,7 @@ impl I18nBackend {
 
     async fn diagnose_document(&self, uri: &Url, content: &str) {
         let diagnostics = self.compute_diagnostics(content).await;
-        
+
         self.client
             .publish_diagnostics(uri.clone(), diagnostics, None)
             .await;
@@ -159,14 +159,14 @@ impl I18nBackend {
         }
 
         let mut content = format!("### 🌍 `{}`\n\n", key);
-        
+
         let source_locale = &config.source_locale;
         if let Some(entry) = translations.get(source_locale) {
             content.push_str(&format!("**{}**: {}\n\n", source_locale, entry.value));
         }
 
         content.push_str("---\n\n");
-        
+
         for (locale, entry) in &translations {
             if locale != source_locale {
                 content.push_str(&format!("**{}**: {}\n\n", locale, entry.value));
@@ -179,7 +179,7 @@ impl I18nBackend {
     async fn get_completions(&self, prefix: &str) -> Vec<CompletionItem> {
         let translation_store = self.translation_store.read().await;
         let config = self.config.read().await;
-        
+
         let Some(store) = translation_store.as_ref() else {
             return vec![];
         };
@@ -216,9 +216,9 @@ impl I18nBackend {
         let store = translation_store.as_ref()?;
 
         let location = store.get_translation_location(key, &config.source_locale)?;
-        
+
         let uri = Url::from_file_path(&location.file_path).ok()?;
-        
+
         Some(Location {
             uri,
             range: Range {
@@ -239,7 +239,7 @@ impl I18nBackend {
 impl LanguageServer for I18nBackend {
     async fn initialize(&self, params: InitializeParams) -> Result<InitializeResult> {
         tracing::info!("i18n-lsp initialize called");
-        
+
         let root_path = params
             .workspace_folders
             .as_ref()
@@ -294,30 +294,35 @@ impl LanguageServer for I18nBackend {
     }
 
     async fn did_change_watched_files(&self, params: DidChangeWatchedFilesParams) {
-        let dominated_changes = params.changes.iter().any(|change| {
-            change.uri.path().ends_with(".json")
-        });
+        let dominated_changes = params
+            .changes
+            .iter()
+            .any(|change| change.uri.path().ends_with(".json"));
 
         if dominated_changes {
             tracing::info!("Translation files changed, reloading...");
-            
+
             let workspace_root = self.workspace_root.read().await;
             let config = self.config.read().await;
-            
+
             if let Some(root) = workspace_root.as_ref() {
                 let store = TranslationStore::new(root.clone());
                 store.scan_and_load(&config.locale_paths);
-                
+
                 let locales = store.get_locales();
                 let keys = store.get_all_keys();
-                
+
                 self.client
                     .log_message(
                         MessageType::INFO,
-                        format!("Reloaded translations: {} locales, {} keys", locales.len(), keys.len()),
+                        format!(
+                            "Reloaded translations: {} locales, {} keys",
+                            locales.len(),
+                            keys.len()
+                        ),
                     )
                     .await;
-                
+
                 *self.translation_store.write().await = Some(store);
             }
         }
@@ -338,14 +343,14 @@ impl LanguageServer for I18nBackend {
 
     async fn did_change(&self, params: DidChangeTextDocumentParams) {
         let uri = params.text_document.uri.clone();
-        
-        if let Some(change) = params.content_changes.into_iter().last() {
+
+        if let Some(change) = params.content_changes.into_iter().next_back() {
             let content = change.text;
             let version = params.text_document.version;
 
             {
                 let mut docs = self.documents.write().await;
-                docs.update(&uri.to_string(), content.clone(), version);
+                docs.update(uri.as_str(), content.clone(), version);
             }
 
             self.diagnose_document(&uri, &content).await;
@@ -354,7 +359,7 @@ impl LanguageServer for I18nBackend {
 
     async fn did_close(&self, params: DidCloseTextDocumentParams) {
         let mut docs = self.documents.write().await;
-        docs.close(&params.text_document.uri.to_string());
+        docs.close(params.text_document.uri.as_str());
     }
 
     async fn hover(&self, params: HoverParams) -> Result<Option<Hover>> {
@@ -362,7 +367,7 @@ impl LanguageServer for I18nBackend {
         let position = params.text_document_position_params.position;
 
         let docs = self.documents.read().await;
-        let Some(doc) = docs.get(&uri.to_string()) else {
+        let Some(doc) = docs.get(uri.as_str()) else {
             return Ok(None);
         };
 
@@ -404,7 +409,7 @@ impl LanguageServer for I18nBackend {
         let position = params.text_document_position.position;
 
         let docs = self.documents.read().await;
-        let Some(doc) = docs.get(&uri.to_string()) else {
+        let Some(doc) = docs.get(uri.as_str()) else {
             return Ok(None);
         };
 
@@ -415,12 +420,14 @@ impl LanguageServer for I18nBackend {
             .unwrap_or("")
             .to_string();
 
-        let Some(prefix) = Self::extract_completion_prefix(&line_content, position.character as usize) else {
+        let Some(prefix) =
+            Self::extract_completion_prefix(&line_content, position.character as usize)
+        else {
             return Ok(None);
         };
-        
+
         let completions = self.get_completions(&prefix).await;
-        
+
         if completions.is_empty() {
             return Ok(None);
         }
@@ -436,7 +443,7 @@ impl LanguageServer for I18nBackend {
         let position = params.text_document_position_params.position;
 
         let docs = self.documents.read().await;
-        let Some(doc) = docs.get(&uri.to_string()) else {
+        let Some(doc) = docs.get(uri.as_str()) else {
             return Ok(None);
         };
 
@@ -460,9 +467,9 @@ impl LanguageServer for I18nBackend {
 
     async fn inlay_hint(&self, params: InlayHintParams) -> Result<Option<Vec<InlayHint>>> {
         let uri = params.text_document.uri;
-        
+
         let docs = self.documents.read().await;
-        let Some(doc) = docs.get(&uri.to_string()) else {
+        let Some(doc) = docs.get(uri.as_str()) else {
             return Ok(None);
         };
 
@@ -472,17 +479,18 @@ impl LanguageServer for I18nBackend {
 
         let translation_store = self.translation_store.read().await;
         let config = self.config.read().await;
-        
+
         let Some(store) = translation_store.as_ref() else {
             return Ok(None);
         };
 
         let mut hints = Vec::new();
-        
+
         for found_key in found_keys {
-            if let Some(translation) = store.get_translation(&found_key.key, &config.source_locale) {
+            if let Some(translation) = store.get_translation(&found_key.key, &config.source_locale)
+            {
                 let display_text = truncate_string(&translation, 30);
-                
+
                 hints.push(InlayHint {
                     position: Position {
                         line: found_key.line as u32,
@@ -506,14 +514,14 @@ impl LanguageServer for I18nBackend {
 impl I18nBackend {
     fn extract_completion_prefix(line: &str, character: usize) -> Option<String> {
         let before_cursor = &line[..character.min(line.len())];
-        
+
         let quote_patterns = ["t(\"", "t('", "$t(\"", "$t('", "i18n.t(\"", "i18n.t('"];
-        
+
         for pattern in quote_patterns {
             if let Some(pos) = before_cursor.rfind(pattern) {
                 let after_quote = pos + pattern.len();
                 let prefix = &before_cursor[after_quote..];
-                
+
                 if !prefix.contains('"') && !prefix.contains('\'') {
                     return Some(prefix.to_string());
                 }

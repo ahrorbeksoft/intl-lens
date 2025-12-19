@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
@@ -43,7 +43,7 @@ impl Default for I18nConfig {
 }
 
 impl I18nConfig {
-    pub fn load_from_workspace(root: &PathBuf) -> Self {
+    pub fn load_from_workspace(root: &Path) -> Self {
         let config_paths = [
             root.join(".i18n-ally.json"),
             root.join("i18n-ally.config.json"),

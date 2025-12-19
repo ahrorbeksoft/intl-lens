@@ -9,16 +9,19 @@ use super::parser::TranslationParser;
 
 #[derive(Debug, Clone)]
 pub struct TranslationEntry {
+    #[allow(dead_code)]
     pub key: String,
     pub value: String,
     pub file_path: PathBuf,
     pub locale: String,
+    #[allow(dead_code)]
     pub line: usize,
 }
 
 #[derive(Debug, Clone)]
 pub struct TranslationLocation {
     pub file_path: PathBuf,
+    #[allow(dead_code)]
     pub locale: String,
     pub line: usize,
 }
@@ -58,7 +61,7 @@ impl TranslationStore {
         {
             let path = entry.path();
             let file_name = path.file_name().unwrap_or_default();
-            
+
             if path.is_file() && (json_glob.is_match(file_name) || yaml_glob.is_match(file_name)) {
                 if let Some(locale) = self.extract_locale_from_path(path) {
                     self.load_translation_file(path, &locale);
@@ -69,7 +72,7 @@ impl TranslationStore {
 
     fn extract_locale_from_path(&self, path: &Path) -> Option<String> {
         let file_stem = path.file_stem()?.to_str()?;
-        
+
         if is_locale_code(file_stem) {
             return Some(file_stem.to_string());
         }
@@ -89,7 +92,7 @@ impl TranslationStore {
         match TranslationParser::parse_file(path) {
             Ok(translations) => {
                 let mut locale_map = self.translations.entry(locale.to_string()).or_default();
-                
+
                 for (key, value) in translations {
                     locale_map.insert(
                         key.clone(),
@@ -153,15 +156,15 @@ impl TranslationStore {
 
     fn find_key_line_in_file(file_path: &Path, key: &str) -> Option<usize> {
         let content = std::fs::read_to_string(file_path).ok()?;
-        
-        let last_part = key.split('.').last().unwrap_or(key);
+
+        let last_part = key.split('.').next_back().unwrap_or(key);
         let search_patterns = [
             format!("\"{}\"", last_part),
             format!("'{}'", last_part),
             format!("{}: ", last_part),
             format!("{}:", last_part),
         ];
-        
+
         for (line_num, line) in content.lines().enumerate() {
             for pattern in &search_patterns {
                 if line.contains(pattern) {
@@ -169,7 +172,7 @@ impl TranslationStore {
                 }
             }
         }
-        
+
         None
     }
 
@@ -206,6 +209,7 @@ impl TranslationStore {
             .collect()
     }
 
+    #[allow(dead_code)]
     pub fn reload(&self, locale_paths: &[String]) {
         self.translations.clear();
         self.locale_files.clear();
@@ -227,9 +231,9 @@ fn is_locale_code(s: &str) -> bool {
     }
 
     let common_locales = [
-        "en", "en-US", "en-GB", "es", "es-ES", "fr", "fr-FR", "de", "de-DE",
-        "it", "it-IT", "pt", "pt-BR", "ja", "ja-JP", "ko", "ko-KR", "zh",
-        "zh-CN", "zh-TW", "ru", "ru-RU", "ar", "ar-SA", "vi", "vi-VN",
+        "en", "en-US", "en-GB", "es", "es-ES", "fr", "fr-FR", "de", "de-DE", "it", "it-IT", "pt",
+        "pt-BR", "ja", "ja-JP", "ko", "ko-KR", "zh", "zh-CN", "zh-TW", "ru", "ru-RU", "ar",
+        "ar-SA", "vi", "vi-VN",
     ];
 
     common_locales.contains(&s)

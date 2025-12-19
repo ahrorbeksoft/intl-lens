@@ -6,6 +6,8 @@ pub struct DocumentStore {
 }
 
 pub struct Document {
+    /// URI of the document - kept for debugging and future use
+    #[allow(dead_code)]
     pub uri: String,
     pub content: Rope,
     pub version: i32,

@@ -90,7 +90,7 @@ impl I18nExtension {
             }
         );
 
-        if !std::fs::metadata(&binary_path).is_ok() {
+        if std::fs::metadata(&binary_path).is_err() {
             zed::set_language_server_installation_status(
                 language_server_id,
                 &zed::LanguageServerInstallationStatus::Downloading,

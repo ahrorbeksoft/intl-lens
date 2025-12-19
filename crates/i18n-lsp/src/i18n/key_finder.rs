@@ -3,7 +3,9 @@ use regex::Regex;
 #[derive(Debug, Clone)]
 pub struct FoundKey {
     pub key: String,
+    #[allow(dead_code)]
     pub start_offset: usize,
+    #[allow(dead_code)]
     pub end_offset: usize,
     pub line: usize,
     pub start_char: usize,
@@ -16,10 +18,8 @@ pub struct KeyFinder {
 
 impl KeyFinder {
     pub fn new(patterns: &[String]) -> Self {
-        let compiled_patterns: Vec<Regex> = patterns
-            .iter()
-            .filter_map(|p| Regex::new(p).ok())
-            .collect();
+        let compiled_patterns: Vec<Regex> =
+            patterns.iter().filter_map(|p| Regex::new(p).ok()).collect();
 
         Self {
             patterns: compiled_patterns,
@@ -56,15 +56,23 @@ impl KeyFinder {
         found_keys
     }
 
-    pub fn find_key_at_position(&self, content: &str, line: usize, character: usize) -> Option<FoundKey> {
+    pub fn find_key_at_position(
+        &self,
+        content: &str,
+        line: usize,
+        character: usize,
+    ) -> Option<FoundKey> {
         let keys = self.find_keys(content);
-        
-        keys.into_iter().find(|k| {
-            k.line == line && character >= k.start_char && character <= k.end_char
-        })
+
+        keys.into_iter()
+            .find(|k| k.line == line && character >= k.start_char && character <= k.end_char)
     }
 
-    fn offset_to_position(content: &str, start_offset: usize, end_offset: usize) -> (usize, usize, usize) {
+    fn offset_to_position(
+        content: &str,
+        start_offset: usize,
+        end_offset: usize,
+    ) -> (usize, usize, usize) {
         let mut line = 0;
         let mut line_start = 0;
 
@@ -149,7 +157,7 @@ mod tests {
     fn test_find_key_at_position() {
         let finder = KeyFinder::default();
         let content = r#"const msg = t("hello.world");"#;
-        
+
         let found = finder.find_key_at_position(content, 0, 16);
         assert!(found.is_some());
         assert_eq!(found.unwrap().key, "hello.world");
