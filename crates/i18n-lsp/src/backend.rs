@@ -2,6 +2,18 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use tokio::sync::RwLock;
+
+/// Safely truncates a string to a maximum number of characters (not bytes).
+/// Handles UTF-8 multibyte characters correctly (e.g., Vietnamese, Japanese).
+fn truncate_string(s: &str, max_chars: usize) -> String {
+    let chars: Vec<char> = s.chars().collect();
+    if chars.len() > max_chars {
+        let truncated: String = chars[..max_chars.saturating_sub(3)].iter().collect();
+        format!("{}...", truncated)
+    } else {
+        s.to_string()
+    }
+}
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer};
@@ -469,11 +481,7 @@ impl LanguageServer for I18nBackend {
         
         for found_key in found_keys {
             if let Some(translation) = store.get_translation(&found_key.key, &config.source_locale) {
-                let display_text = if translation.len() > 30 {
-                    format!("{}...", &translation[..27])
-                } else {
-                    translation
-                };
+                let display_text = truncate_string(&translation, 30);
                 
                 hints.push(InlayHint {
                     position: Position {
