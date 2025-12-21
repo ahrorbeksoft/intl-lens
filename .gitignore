@@ -19,3 +19,5 @@ Cargo.lock
 
 # Test project (not part of extension)
 test-project/
+
+plans/*
