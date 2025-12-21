@@ -184,8 +184,7 @@ impl I18nBackend {
 
         let locale_paths = { self.config.read().await.locale_paths.clone() };
         let workspace_root = { self.workspace_root.read().await.clone() };
-        let relative_pattern_support =
-            *self.watched_files_relative_pattern_supported.read().await;
+        let relative_pattern_support = *self.watched_files_relative_pattern_supported.read().await;
 
         let watchers = Self::build_file_watchers(
             &locale_paths,
@@ -639,10 +638,8 @@ impl LanguageServer for I18nBackend {
             .watched_files_dynamic_registration_supported
             .write()
             .await = watched_files_dynamic_registration_support;
-        *self
-            .watched_files_relative_pattern_supported
-            .write()
-            .await = watched_files_relative_pattern_support;
+        *self.watched_files_relative_pattern_supported.write().await =
+            watched_files_relative_pattern_support;
 
         tracing::info!(
             "Client inlay hint dynamicRegistration: {}",
@@ -687,9 +684,9 @@ impl LanguageServer for I18nBackend {
                         change: Some(TextDocumentSyncKind::FULL),
                         will_save: None,
                         will_save_wait_until: None,
-                        save: Some(TextDocumentSyncSaveOptions::SaveOptions(
-                            SaveOptions { include_text: Some(false) },
-                        )),
+                        save: Some(TextDocumentSyncSaveOptions::SaveOptions(SaveOptions {
+                            include_text: Some(false),
+                        })),
                     },
                 )),
                 hover_provider: Some(HoverProviderCapability::Simple(true)),
