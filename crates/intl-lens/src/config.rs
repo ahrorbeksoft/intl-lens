@@ -61,7 +61,8 @@ impl I18nConfig {
                         .as_ref()
                         .and_then(|value| value.as_object())
                         .is_some_and(|object| {
-                            object.contains_key("localePaths") || object.contains_key("locale_paths")
+                            object.contains_key("localePaths")
+                                || object.contains_key("locale_paths")
                         });
 
                     if !has_locale_paths {
@@ -122,7 +123,8 @@ fn default_function_patterns() -> Vec<String> {
         r#"\$t\s*\(\s*["']([^"']+)["']"#.to_string(),
         r#"formatMessage\s*\(\s*\{\s*id:\s*["']([^"']+)["']"#.to_string(),
         r#"translate(?:Service)?\.(?:instant|get|stream)\s*\(\s*["']([^"']+)["']"#.to_string(),
-        r#"transloco(?:Service)?\.(?:translate|selectTranslate)\s*\(\s*["']([^"']+)["']"#.to_string(),
+        r#"transloco(?:Service)?\.(?:translate|selectTranslate)\s*\(\s*["']([^"']+)["']"#
+            .to_string(),
         r#"["']([^"']+)["']\s*\|\s*(?:translate|transloco)\b"#.to_string(),
         r#"__\s*\(\s*["']([^"']+)["']"#.to_string(),
         r#"trans(?:_choice)?\s*\(\s*["']([^"']+)["']"#.to_string(),
@@ -156,8 +158,11 @@ fn is_angular_project(root: &Path) -> bool {
         return false;
     };
 
-    json_has_dependency(&value, "@angular/core", &["dependencies", "devDependencies"])
-        || json_has_dependency(&value, "@angular/cli", &["dependencies", "devDependencies"])
+    json_has_dependency(
+        &value,
+        "@angular/core",
+        &["dependencies", "devDependencies"],
+    ) || json_has_dependency(&value, "@angular/cli", &["dependencies", "devDependencies"])
 }
 
 fn is_laravel_project(root: &Path) -> bool {

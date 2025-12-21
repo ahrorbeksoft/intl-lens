@@ -3,8 +3,8 @@ use std::sync::Arc;
 
 use tokio::sync::RwLock;
 
-use tower_lsp::lsp_types::*;
 use tower_lsp::jsonrpc::Result;
+use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer};
 
 use crate::config::I18nConfig;
@@ -79,15 +79,10 @@ impl I18nBackend {
     }
 
     async fn register_inlay_hint_capability(&self) {
-        let supports_dynamic = *self
-            .inlay_hint_dynamic_registration_supported
-            .read()
-            .await;
+        let supports_dynamic = *self.inlay_hint_dynamic_registration_supported.read().await;
 
         if !supports_dynamic {
-            tracing::debug!(
-                "Skipping inlay hint dynamic registration (dynamicRegistration=false)"
-            );
+            tracing::debug!("Skipping inlay hint dynamic registration (dynamicRegistration=false)");
             return;
         }
 
@@ -166,10 +161,7 @@ impl I18nBackend {
 
         match self.client.register_capability(vec![registration]).await {
             Ok(_) => tracing::info!("Registered inlay hint capability dynamically"),
-            Err(err) => tracing::warn!(
-                "Dynamic inlay hint registration failed: {:?}",
-                err
-            ),
+            Err(err) => tracing::warn!("Dynamic inlay hint registration failed: {:?}", err),
         }
     }
 

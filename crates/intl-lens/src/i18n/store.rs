@@ -90,12 +90,12 @@ impl TranslationStore {
                 let mut locale_map = self.translations.entry(locale.to_string()).or_default();
                 let extension = path.extension().and_then(|e| e.to_str()).unwrap_or("");
                 let file_stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
-                let prefix = if extension == "php" && !file_stem.is_empty() && !is_locale_code(file_stem)
-                {
-                    Some(file_stem)
-                } else {
-                    None
-                };
+                let prefix =
+                    if extension == "php" && !file_stem.is_empty() && !is_locale_code(file_stem) {
+                        Some(file_stem)
+                    } else {
+                        None
+                    };
 
                 for (key, value) in translations {
                     let full_key = match prefix {
@@ -208,7 +208,6 @@ impl TranslationStore {
             })
             .collect()
     }
-
 }
 
 fn is_locale_code(s: &str) -> bool {
