@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use tokio::sync::RwLock;
@@ -28,6 +28,9 @@ pub struct I18nBackend {
     key_finder: Arc<RwLock<KeyFinder>>,
     workspace_root: Arc<RwLock<Option<PathBuf>>>,
     inlay_hint_dynamic_registration_supported: Arc<RwLock<bool>>,
+    inlay_hint_refresh_supported: Arc<RwLock<bool>>,
+    watched_files_dynamic_registration_supported: Arc<RwLock<bool>>,
+    watched_files_relative_pattern_supported: Arc<RwLock<bool>>,
 }
 
 impl I18nBackend {
@@ -40,6 +43,9 @@ impl I18nBackend {
             key_finder: Arc::new(RwLock::new(KeyFinder::default())),
             workspace_root: Arc::new(RwLock::new(None)),
             inlay_hint_dynamic_registration_supported: Arc::new(RwLock::new(false)),
+            inlay_hint_refresh_supported: Arc::new(RwLock::new(false)),
+            watched_files_dynamic_registration_supported: Arc::new(RwLock::new(false)),
+            watched_files_relative_pattern_supported: Arc::new(RwLock::new(false)),
         }
     }
 
@@ -162,6 +168,56 @@ impl I18nBackend {
         match self.client.register_capability(vec![registration]).await {
             Ok(_) => tracing::info!("Registered inlay hint capability dynamically"),
             Err(err) => tracing::warn!("Dynamic inlay hint registration failed: {:?}", err),
+        }
+    }
+
+    async fn register_watched_files_capability(&self) {
+        let supports_dynamic = *self
+            .watched_files_dynamic_registration_supported
+            .read()
+            .await;
+
+        if !supports_dynamic {
+            tracing::debug!("Skipping watched files registration (dynamicRegistration=false)");
+            return;
+        }
+
+        let locale_paths = { self.config.read().await.locale_paths.clone() };
+        let workspace_root = { self.workspace_root.read().await.clone() };
+        let relative_pattern_support =
+            *self.watched_files_relative_pattern_supported.read().await;
+
+        let watchers = Self::build_file_watchers(
+            &locale_paths,
+            workspace_root.as_deref(),
+            relative_pattern_support,
+        );
+        if watchers.is_empty() {
+            tracing::debug!("Skipping watched files registration (no locale paths)");
+            return;
+        }
+
+        let register_options = DidChangeWatchedFilesRegistrationOptions { watchers };
+        let register_options = match serde_json::to_value(register_options) {
+            Ok(value) => value,
+            Err(err) => {
+                tracing::warn!(
+                    "Failed to serialize watched files registration options: {:?}",
+                    err
+                );
+                return;
+            }
+        };
+
+        let registration = Registration {
+            id: "intl-lens-watched-files".to_string(),
+            method: "workspace/didChangeWatchedFiles".to_string(),
+            register_options: Some(register_options),
+        };
+
+        match self.client.register_capability(vec![registration]).await {
+            Ok(_) => tracing::info!("Registered watched files capability dynamically"),
+            Err(err) => tracing::warn!("Dynamic watched files registration failed: {:?}", err),
         }
     }
 
@@ -319,6 +375,174 @@ impl I18nBackend {
             .collect()
     }
 
+    fn build_file_watchers(
+        locale_paths: &[String],
+        workspace_root: Option<&Path>,
+        relative_pattern_support: bool,
+    ) -> Vec<FileSystemWatcher> {
+        let mut patterns = Vec::new();
+
+        for locale_path in locale_paths {
+            let trimmed = locale_path.trim_end_matches(|c| c == '/' || c == '\\');
+            if trimmed.is_empty() {
+                continue;
+            }
+
+            if Self::is_translation_file_path(trimmed) {
+                patterns.push(trimmed.to_string());
+                continue;
+            }
+
+            for extension in Self::translation_extensions() {
+                patterns.push(format!("{}/**/*{}", trimmed, extension));
+            }
+        }
+
+        patterns.sort();
+        patterns.dedup();
+
+        let base_uri = if relative_pattern_support {
+            workspace_root.and_then(|root| Url::from_directory_path(root).ok())
+        } else {
+            None
+        };
+
+        patterns
+            .into_iter()
+            .map(|pattern| {
+                let glob_pattern = if let Some(base_uri) = base_uri.clone() {
+                    GlobPattern::Relative(RelativePattern {
+                        base_uri: OneOf::Right(base_uri),
+                        pattern,
+                    })
+                } else if let Some(root) = workspace_root {
+                    GlobPattern::String(Self::to_absolute_pattern(root, &pattern))
+                } else {
+                    GlobPattern::String(pattern)
+                };
+
+                FileSystemWatcher {
+                    glob_pattern,
+                    kind: None,
+                }
+            })
+            .collect()
+    }
+
+    fn to_absolute_pattern(root: &Path, pattern: &str) -> String {
+        let mut root_str = root.to_string_lossy().replace('\\', "/");
+        root_str = root_str.trim_end_matches('/').to_string();
+
+        if pattern.is_empty() {
+            return root_str;
+        }
+
+        if pattern.starts_with('/') {
+            format!("{}{}", root_str, pattern)
+        } else {
+            format!("{}/{}", root_str, pattern)
+        }
+    }
+
+    fn translation_extensions() -> [&'static str; 4] {
+        [".json", ".yaml", ".yml", ".php"]
+    }
+
+    fn has_translation_extension(path: &Path) -> bool {
+        let lower = path.to_string_lossy().to_ascii_lowercase();
+        Self::translation_extensions()
+            .iter()
+            .any(|extension| lower.ends_with(extension))
+    }
+
+    fn is_translation_file_path(path: &str) -> bool {
+        let lower = path.to_ascii_lowercase();
+        Self::translation_extensions()
+            .iter()
+            .any(|extension| lower.ends_with(extension))
+    }
+
+    fn is_translation_file_in_paths(path: &Path, root: &Path, locale_paths: &[String]) -> bool {
+        if !Self::has_translation_extension(path) {
+            return false;
+        }
+
+        for locale_path in locale_paths {
+            let trimmed = locale_path.trim_end_matches(|c| c == '/' || c == '\\');
+            if trimmed.is_empty() {
+                continue;
+            }
+
+            let candidate = if Path::new(trimmed).is_absolute() {
+                PathBuf::from(trimmed)
+            } else {
+                root.join(trimmed)
+            };
+
+            if candidate.is_file() {
+                if path == candidate {
+                    return true;
+                }
+            } else if path.starts_with(&candidate) {
+                return true;
+            }
+        }
+
+        false
+    }
+
+    async fn is_translation_uri(&self, uri: &Url) -> bool {
+        let Some(path) = uri.to_file_path().ok() else {
+            return false;
+        };
+
+        let workspace_root = { self.workspace_root.read().await.clone() };
+        let locale_paths = { self.config.read().await.locale_paths.clone() };
+
+        let Some(root) = workspace_root.as_ref() else {
+            return false;
+        };
+
+        Self::is_translation_file_in_paths(&path, root, &locale_paths)
+    }
+
+    async fn reload_translations(&self) {
+        let workspace_root = { self.workspace_root.read().await.clone() };
+        let locale_paths = { self.config.read().await.locale_paths.clone() };
+
+        let Some(root) = workspace_root.as_ref() else {
+            return;
+        };
+
+        let store = TranslationStore::new(root.clone());
+        store.scan_and_load(&locale_paths);
+
+        let locales = store.get_locales();
+        let keys = store.get_all_keys();
+
+        self.client
+            .log_message(
+                MessageType::INFO,
+                format!(
+                    "Reloaded translations: {} locales, {} keys",
+                    locales.len(),
+                    keys.len()
+                ),
+            )
+            .await;
+
+        *self.translation_store.write().await = Some(store);
+        self.refresh_inlay_hints().await;
+    }
+
+    async fn refresh_inlay_hints(&self) {
+        if *self.inlay_hint_refresh_supported.read().await {
+            if let Err(err) = self.client.inlay_hint_refresh().await {
+                tracing::warn!("Inlay hint refresh failed: {:?}", err);
+            }
+        }
+    }
+
     async fn get_definition_locations(&self, key: &str) -> Vec<Location> {
         let translation_store = self.translation_store.read().await;
         let config = self.config.read().await;
@@ -387,9 +611,54 @@ impl LanguageServer for I18nBackend {
         *self.inlay_hint_dynamic_registration_supported.write().await =
             inlay_hint_dynamic_registration_support;
 
+        let inlay_hint_refresh_supported = params
+            .capabilities
+            .workspace
+            .as_ref()
+            .and_then(|workspace| workspace.inlay_hint.as_ref())
+            .and_then(|inlay| inlay.refresh_support)
+            .unwrap_or(false);
+
+        *self.inlay_hint_refresh_supported.write().await = inlay_hint_refresh_supported;
+
+        let watched_files = params
+            .capabilities
+            .workspace
+            .as_ref()
+            .and_then(|workspace| workspace.did_change_watched_files.as_ref());
+
+        let watched_files_dynamic_registration_support = watched_files
+            .and_then(|watch| watch.dynamic_registration)
+            .unwrap_or(false);
+
+        let watched_files_relative_pattern_support = watched_files
+            .and_then(|watch| watch.relative_pattern_support)
+            .unwrap_or(false);
+
+        *self
+            .watched_files_dynamic_registration_supported
+            .write()
+            .await = watched_files_dynamic_registration_support;
+        *self
+            .watched_files_relative_pattern_supported
+            .write()
+            .await = watched_files_relative_pattern_support;
+
         tracing::info!(
             "Client inlay hint dynamicRegistration: {}",
             inlay_hint_dynamic_registration_support
+        );
+        tracing::info!(
+            "Client inlay hint refreshSupport: {}",
+            inlay_hint_refresh_supported
+        );
+        tracing::info!(
+            "Client didChangeWatchedFiles dynamicRegistration: {}",
+            watched_files_dynamic_registration_support
+        );
+        tracing::info!(
+            "Client didChangeWatchedFiles relativePatternSupport: {}",
+            watched_files_relative_pattern_support
         );
 
         let root_path = params
@@ -412,8 +681,16 @@ impl LanguageServer for I18nBackend {
 
         Ok(InitializeResult {
             capabilities: ServerCapabilities {
-                text_document_sync: Some(TextDocumentSyncCapability::Kind(
-                    TextDocumentSyncKind::FULL,
+                text_document_sync: Some(TextDocumentSyncCapability::Options(
+                    TextDocumentSyncOptions {
+                        open_close: Some(true),
+                        change: Some(TextDocumentSyncKind::FULL),
+                        will_save: None,
+                        will_save_wait_until: None,
+                        save: Some(TextDocumentSyncSaveOptions::SaveOptions(
+                            SaveOptions { include_text: Some(false) },
+                        )),
+                    },
                 )),
                 hover_provider: Some(HoverProviderCapability::Simple(true)),
                 completion_provider: Some(CompletionOptions {
@@ -445,6 +722,7 @@ impl LanguageServer for I18nBackend {
             .log_message(MessageType::INFO, "i18n-lsp server initialized")
             .await;
         self.register_inlay_hint_capability().await;
+        self.register_watched_files_capability().await;
     }
 
     async fn shutdown(&self) -> Result<()> {
@@ -452,37 +730,17 @@ impl LanguageServer for I18nBackend {
     }
 
     async fn did_change_watched_files(&self, params: DidChangeWatchedFilesParams) {
-        let dominated_changes = params
-            .changes
-            .iter()
-            .any(|change| change.uri.path().ends_with(".json"));
-
-        if dominated_changes {
-            tracing::info!("Translation files changed, reloading...");
-
-            let workspace_root = self.workspace_root.read().await;
-            let config = self.config.read().await;
-
-            if let Some(root) = workspace_root.as_ref() {
-                let store = TranslationStore::new(root.clone());
-                store.scan_and_load(&config.locale_paths);
-
-                let locales = store.get_locales();
-                let keys = store.get_all_keys();
-
-                self.client
-                    .log_message(
-                        MessageType::INFO,
-                        format!(
-                            "Reloaded translations: {} locales, {} keys",
-                            locales.len(),
-                            keys.len()
-                        ),
-                    )
-                    .await;
-
-                *self.translation_store.write().await = Some(store);
+        let mut has_translation_changes = false;
+        for change in &params.changes {
+            if self.is_translation_uri(&change.uri).await {
+                has_translation_changes = true;
+                break;
             }
+        }
+
+        if has_translation_changes {
+            tracing::info!("Translation files changed, reloading...");
+            self.reload_translations().await;
         }
     }
 
@@ -512,6 +770,13 @@ impl LanguageServer for I18nBackend {
             }
 
             self.diagnose_document(&uri, &content).await;
+        }
+    }
+
+    async fn did_save(&self, params: DidSaveTextDocumentParams) {
+        if self.is_translation_uri(&params.text_document.uri).await {
+            tracing::info!("Translation file saved, reloading...");
+            self.reload_translations().await;
         }
     }
 
