@@ -248,15 +248,37 @@ impl I18nBackend {
         let mut content = format!("### 🌍 `{}`\n\n", key);
 
         let source_locale = &config.source_locale;
-        if let Some(entry) = translations.get(source_locale) {
-            content.push_str(&format!("**{}**: {}\n\n", source_locale, entry.value));
+        let format_line = |locale: &str| -> Option<String> {
+            let entry = translations.get(locale)?;
+            let mut line = format!("**{}**: {}", locale, entry.value);
+
+            if let Some(location) = store.get_translation_location(key, locale) {
+                if let Ok(uri) = Url::from_file_path(&location.file_path) {
+                    let link = format!("{}#L{}", uri, location.line + 1);
+                    line.push_str(&format!(" ([↗]({} \"Go to Definition\"))", link));
+                }
+            }
+
+            line.push_str("\n\n");
+            Some(line)
+        };
+
+        if let Some(line) = format_line(source_locale) {
+            content.push_str(&line);
         }
 
         content.push_str("---\n\n");
 
-        for (locale, entry) in &translations {
-            if locale != source_locale {
-                content.push_str(&format!("**{}**: {}\n\n", locale, entry.value));
+        let mut other_locales: Vec<String> = translations
+            .keys()
+            .filter(|locale| *locale != source_locale)
+            .cloned()
+            .collect();
+        other_locales.sort();
+
+        for locale in other_locales {
+            if let Some(line) = format_line(&locale) {
+                content.push_str(&line);
             }
         }
 
@@ -297,28 +319,54 @@ impl I18nBackend {
             .collect()
     }
 
-    async fn get_definition_location(&self, key: &str) -> Option<Location> {
+    async fn get_definition_locations(&self, key: &str) -> Vec<Location> {
         let translation_store = self.translation_store.read().await;
         let config = self.config.read().await;
-        let store = translation_store.as_ref()?;
+        let Some(store) = translation_store.as_ref() else {
+            return Vec::new();
+        };
 
-        let location = store.get_translation_location(key, &config.source_locale)?;
+        let translations = store.get_all_translations(key);
+        if translations.is_empty() {
+            return Vec::new();
+        }
 
-        let uri = Url::from_file_path(&location.file_path).ok()?;
+        let source_locale = &config.source_locale;
+        let mut other_locales: Vec<String> = translations
+            .keys()
+            .filter(|locale| *locale != source_locale)
+            .cloned()
+            .collect();
+        other_locales.sort();
 
-        Some(Location {
-            uri,
-            range: Range {
-                start: Position {
-                    line: location.line as u32,
-                    character: 0,
-                },
-                end: Position {
-                    line: location.line as u32,
-                    character: 0,
-                },
-            },
-        })
+        let mut locales = Vec::new();
+        if translations.contains_key(source_locale) {
+            locales.push(source_locale.clone());
+        }
+        locales.extend(other_locales);
+
+        let mut locations = Vec::new();
+        for locale in locales {
+            if let Some(location) = store.get_translation_location(key, &locale) {
+                if let Ok(uri) = Url::from_file_path(&location.file_path) {
+                    locations.push(Location {
+                        uri,
+                        range: Range {
+                            start: Position {
+                                line: location.line as u32,
+                                character: 0,
+                            },
+                            end: Position {
+                                line: location.line as u32,
+                                character: 0,
+                            },
+                        },
+                    });
+                }
+            }
+        }
+
+        locations
     }
 }
 
@@ -559,11 +607,16 @@ impl LanguageServer for I18nBackend {
             return Ok(None);
         };
 
-        let Some(location) = self.get_definition_location(&found_key.key).await else {
+        let locations = self.get_definition_locations(&found_key.key).await;
+        if locations.is_empty() {
             return Ok(None);
-        };
+        }
 
-        Ok(Some(GotoDefinitionResponse::Scalar(location)))
+        if locations.len() == 1 {
+            return Ok(Some(GotoDefinitionResponse::Scalar(locations[0].clone())));
+        }
+
+        Ok(Some(GotoDefinitionResponse::Array(locations)))
     }
 
     async fn inlay_hint(&self, params: InlayHintParams) -> Result<Option<Vec<InlayHint>>> {
