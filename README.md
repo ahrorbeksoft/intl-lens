@@ -108,6 +108,10 @@ Works out of the box with:
 | **ngx-translate (Angular)** | `translateService.instant("key")` `translateService.get("key")` `| translate` |
 | **Transloco (Angular)** | `translocoService.translate("key")` `selectTranslate("key")` `| transloco` |
 | **Laravel** | `__("key")` `trans("key")` `Lang::get("key")` `@lang("key")` |
+| **Flutter (gen_l10n)** | `AppLocalizations.of(context)!.key` |
+| **easy_localization** | `'key'.tr()` `tr('key')` `context.tr('key')` |
+| **flutter_i18n** | `FlutterI18n.translate(context, 'key')` `I18nText('key')` |
+| **GetX** | `'key'.tr` `'key'.trParams({})` |
 | **Custom** | Configure your own patterns! |
 
 ## 🧩 Supported Languages
@@ -118,6 +122,7 @@ Works out of the box with:
 - Angular templates
 - PHP
 - Blade
+- Dart (Flutter)
 
 ## ⚙️ Configuration
 
@@ -164,6 +169,7 @@ Create `.zed/i18n.json` in your project root:
 | JSON | `.json` |
 | YAML | `.yaml` `.yml` |
 | PHP | `.php` |
+| ARB (Flutter) | `.arb` |
 
 **Nested structure:**
 ```
@@ -182,6 +188,15 @@ locales/
 ├── en.json
 ├── vi.json
 └── ja.json
+```
+
+**Flutter ARB structure:**
+```
+lib/
+└── l10n/
+    ├── app_en.arb
+    ├── app_es.arb
+    └── app_vi.arb
 ```
 
 ## 🛠️ Development

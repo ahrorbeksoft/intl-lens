@@ -97,11 +97,27 @@ impl Default for KeyFinder {
 
 fn default_patterns() -> Vec<String> {
     vec![
-        r#"t\s*\(\s*["']([^"']+)["']"#.to_string(),
+        // JavaScript/TypeScript patterns
+        r#"(?:^|[^\w])t\s*\(\s*["']([^"']+)["']"#.to_string(),
         r#"i18n\.t\s*\(\s*["']([^"']+)["']"#.to_string(),
         r#"\$t\s*\(\s*["']([^"']+)["']"#.to_string(),
         r#"formatMessage\s*\(\s*\{\s*id:\s*["']([^"']+)["']"#.to_string(),
         r#"<Trans\s+i18nKey\s*=\s*["']([^"']+)["']"#.to_string(),
+        // Flutter/Dart patterns - easy_localization
+        r#"['"]([^'"]+)['"]\s*\.tr\("#.to_string(),
+        r#"['"]([^'"]+)['"]\s*\.tr\(\)"#.to_string(),
+        r#"(?:^|[^\w])tr\(\s*['"]([^'"]+)['"]"#.to_string(),
+        r#"context\.tr\(\s*['"]([^'"]+)['"]"#.to_string(),
+        r#"['"]([^'"]+)['"]\s*\.plural\("#.to_string(),
+        // Flutter/Dart patterns - flutter_i18n
+        r#"FlutterI18n\.translate\([^,]+,\s*['"]([^'"]+)['"]"#.to_string(),
+        r#"FlutterI18n\.plural\([^,]+,\s*['"]([^'"]+)['"]"#.to_string(),
+        r#"I18nText\(\s*['"]([^'"]+)['"]"#.to_string(),
+        r#"I18nPlural\(\s*['"]([^'"]+)['"]"#.to_string(),
+        // Flutter/Dart patterns - GetX
+        r#"['"]([^'"]+)['"]\s*\.tr(?:\s|$|\)|,)"#.to_string(),
+        r#"['"]([^'"]+)['"]\s*\.trParams\("#.to_string(),
+        r#"['"]([^'"]+)['"]\s*\.trPlural\("#.to_string(),
     ]
 }
 
@@ -160,5 +176,59 @@ mod tests {
 
         let not_found = finder.find_key_at_position(content, 0, 0);
         assert!(not_found.is_none());
+    }
+
+    #[test]
+    fn test_find_flutter_easy_localization_tr() {
+        let finder = KeyFinder::default();
+        let content = r#"Text('hello.world'.tr())"#;
+        let keys = finder.find_keys(content);
+        assert_eq!(keys.len(), 1);
+        assert_eq!(keys[0].key, "hello.world");
+    }
+
+    #[test]
+    fn test_find_flutter_easy_localization_tr_function() {
+        let finder = KeyFinder::default();
+        let content = r#"tr('common.greeting')"#;
+        let keys = finder.find_keys(content);
+        assert_eq!(keys.len(), 1);
+        assert_eq!(keys[0].key, "common.greeting");
+    }
+
+    #[test]
+    fn test_find_flutter_i18n_translate() {
+        let finder = KeyFinder::default();
+        let content = r#"FlutterI18n.translate(context, 'messages.welcome')"#;
+        let keys = finder.find_keys(content);
+        assert_eq!(keys.len(), 1);
+        assert_eq!(keys[0].key, "messages.welcome");
+    }
+
+    #[test]
+    fn test_find_flutter_i18n_text_widget() {
+        let finder = KeyFinder::default();
+        let content = r#"I18nText('button.submit')"#;
+        let keys = finder.find_keys(content);
+        assert_eq!(keys.len(), 1);
+        assert_eq!(keys[0].key, "button.submit");
+    }
+
+    #[test]
+    fn test_find_flutter_getx_tr() {
+        let finder = KeyFinder::default();
+        let content = r#"Text('hello'.tr)"#;
+        let keys = finder.find_keys(content);
+        assert_eq!(keys.len(), 1);
+        assert_eq!(keys[0].key, "hello");
+    }
+
+    #[test]
+    fn test_find_flutter_getx_tr_params() {
+        let finder = KeyFinder::default();
+        let content = r#"'greeting'.trParams({'name': 'John'})"#;
+        let keys = finder.find_keys(content);
+        assert_eq!(keys.len(), 1);
+        assert_eq!(keys[0].key, "greeting");
     }
 }

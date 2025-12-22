@@ -133,6 +133,11 @@ impl I18nBackend {
                 scheme: None,
                 pattern: None,
             },
+            DocumentFilter {
+                language: Some("dart".to_string()),
+                scheme: None,
+                pattern: None,
+            },
         ]);
 
         let register_options = InlayHintRegistrationOptions {
@@ -443,8 +448,8 @@ impl I18nBackend {
         }
     }
 
-    fn translation_extensions() -> [&'static str; 4] {
-        [".json", ".yaml", ".yml", ".php"]
+    fn translation_extensions() -> [&'static str; 5] {
+        [".json", ".yaml", ".yml", ".php", ".arb"]
     }
 
     fn has_translation_extension(path: &Path) -> bool {

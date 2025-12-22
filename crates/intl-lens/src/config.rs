@@ -117,20 +117,37 @@ fn default_key_style() -> KeyStyle {
 
 fn default_function_patterns() -> Vec<String> {
     vec![
-        r#"t\s*\(\s*["']([^"']+)["']"#.to_string(),
+        // JavaScript/TypeScript patterns
+        r#"(?:^|[^\w])t\s*\(\s*["']([^"']+)["']"#.to_string(),
         r#"i18n\.t\s*\(\s*["']([^"']+)["']"#.to_string(),
         r#"useTranslation\s*\(\s*\)\s*.*?t\s*\(\s*["']([^"']+)["']"#.to_string(),
         r#"\$t\s*\(\s*["']([^"']+)["']"#.to_string(),
         r#"formatMessage\s*\(\s*\{\s*id:\s*["']([^"']+)["']"#.to_string(),
-        r#"translate(?:Service)?\.(?:instant|get|stream)\s*\(\s*["']([^"']+)["']"#.to_string(),
-        r#"transloco(?:Service)?\.(?:translate|selectTranslate)\s*\(\s*["']([^"']+)["']"#
-            .to_string(),
+        // Angular patterns
+        r#"translateService\.(?:instant|get|stream)\s*\(\s*["']([^"']+)["']"#.to_string(),
+        r#"translocoService\.(?:translate|selectTranslate)\s*\(\s*["']([^"']+)["']"#.to_string(),
         r#"["']([^"']+)["']\s*\|\s*(?:translate|transloco)\b"#.to_string(),
+        // PHP/Laravel patterns
         r#"__\s*\(\s*["']([^"']+)["']"#.to_string(),
         r#"trans(?:_choice)?\s*\(\s*["']([^"']+)["']"#.to_string(),
         r#"Lang::(?:get|choice)\s*\(\s*["']([^"']+)["']"#.to_string(),
         r#"@lang\s*\(\s*["']([^"']+)["']"#.to_string(),
         r#"@choice\s*\(\s*["']([^"']+)["']"#.to_string(),
+        // Flutter/Dart patterns - easy_localization
+        r#"['"]([^'"]+)['"]\s*\.tr\("#.to_string(),
+        r#"['"]([^'"]+)['"]\s*\.tr\(\)"#.to_string(),
+        r#"(?:^|[^\w])tr\(\s*['"]([^'"]+)['"]"#.to_string(),
+        r#"context\.tr\(\s*['"]([^'"]+)['"]"#.to_string(),
+        r#"['"]([^'"]+)['"]\s*\.plural\("#.to_string(),
+        // Flutter/Dart patterns - flutter_i18n
+        r#"FlutterI18n\.translate\([^,]+,\s*['"]([^'"]+)['"]"#.to_string(),
+        r#"FlutterI18n\.plural\([^,]+,\s*['"]([^'"]+)['"]"#.to_string(),
+        r#"I18nText\(\s*['"]([^'"]+)['"]"#.to_string(),
+        r#"I18nPlural\(\s*['"]([^'"]+)['"]"#.to_string(),
+        // Flutter/Dart patterns - GetX
+        r#"['"]([^'"]+)['"]\s*\.tr(?:\s|$|\)|,)"#.to_string(),
+        r#"['"]([^'"]+)['"]\s*\.trParams\("#.to_string(),
+        r#"['"]([^'"]+)['"]\s*\.trPlural\("#.to_string(),
     ]
 }
 
@@ -144,6 +161,18 @@ fn detect_framework_locale_paths(root: &Path) -> Vec<String> {
     if is_laravel_project(root) {
         paths.push("resources/lang".to_string());
         paths.push("lang".to_string());
+    }
+
+    if is_flutter_project(root) {
+        // Check l10n.yaml for custom arb-dir
+        if let Some(arb_dir) = parse_l10n_yaml(root) {
+            paths.push(arb_dir);
+        }
+        // Default Flutter locale paths
+        paths.push("lib/l10n".to_string());
+        paths.push("assets/translations".to_string());
+        paths.push("assets/flutter_i18n".to_string());
+        paths.push("assets/i18n".to_string());
     }
 
     paths
@@ -191,4 +220,25 @@ fn json_has_dependency(value: &Value, dependency: &str, sections: &[&str]) -> bo
 
 fn json_has_name(value: &Value, name: &str) -> bool {
     value.get("name").and_then(|v| v.as_str()) == Some(name)
+}
+
+fn is_flutter_project(root: &Path) -> bool {
+    let pubspec = root.join("pubspec.yaml");
+    let Ok(content) = std::fs::read_to_string(&pubspec) else {
+        return false;
+    };
+
+    // Check for flutter sdk dependency in pubspec.yaml
+    content.contains("flutter:") && content.contains("sdk: flutter")
+}
+
+fn parse_l10n_yaml(root: &Path) -> Option<String> {
+    let l10n_yaml = root.join("l10n.yaml");
+    let content = std::fs::read_to_string(&l10n_yaml).ok()?;
+
+    // Parse l10n.yaml to find arb-dir
+    let yaml: serde_yaml::Value = serde_yaml::from_str(&content).ok()?;
+    yaml.get("arb-dir")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
 }

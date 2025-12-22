@@ -15,8 +15,32 @@ impl TranslationParser {
         match extension {
             "yaml" | "yml" => Self::parse_yaml(&content),
             "php" => Self::parse_php(&content),
+            "arb" => Self::parse_arb(&content),
             _ => Self::parse_json(&content),
         }
+    }
+
+    /// Parse ARB (Application Resource Bundle) files used by Flutter.
+    /// ARB is JSON-based but contains metadata keys (starting with @ or @@) that should be filtered.
+    pub fn parse_arb(content: &str) -> Result<HashMap<String, String>> {
+        let value: JsonValue = serde_json::from_str(content)?;
+        let mut result = HashMap::new();
+
+        if let JsonValue::Object(map) = value {
+            for (key, val) in map {
+                // Skip metadata keys: @@locale, @keyName (descriptions), etc.
+                if key.starts_with('@') {
+                    continue;
+                }
+
+                // Only include string values (translations)
+                if let JsonValue::String(s) = val {
+                    result.insert(key, s);
+                }
+            }
+        }
+
+        Ok(result)
     }
 
     pub fn parse_php(content: &str) -> Result<HashMap<String, String>> {
@@ -558,5 +582,53 @@ mod tests {
         let result = TranslationParser::parse_php(php).unwrap();
         assert_eq!(result.get("common.hello"), Some(&"Hello".to_string()));
         assert_eq!(result.get("common.bye"), Some(&"Goodbye".to_string()));
+    }
+
+    #[test]
+    fn test_parse_arb_basic() {
+        let arb = r#"{
+            "@@locale": "en",
+            "helloWorld": "Hello World!",
+            "@helloWorld": {
+                "description": "The conventional greeting"
+            },
+            "greeting": "Hello {name}",
+            "@greeting": {
+                "description": "A greeting with name",
+                "placeholders": {
+                    "name": {
+                        "type": "String"
+                    }
+                }
+            }
+        }"#;
+        let result = TranslationParser::parse_arb(arb).unwrap();
+        assert_eq!(result.get("helloWorld"), Some(&"Hello World!".to_string()));
+        assert_eq!(result.get("greeting"), Some(&"Hello {name}".to_string()));
+        // Metadata keys should be filtered out
+        assert!(result.get("@@locale").is_none());
+        assert!(result.get("@helloWorld").is_none());
+        assert!(result.get("@greeting").is_none());
+    }
+
+    #[test]
+    fn test_parse_arb_with_plurals() {
+        let arb = r#"{
+            "@@locale": "en",
+            "itemCount": "{count, plural, =0{no items} =1{1 item} other{{count} items}}",
+            "@itemCount": {
+                "placeholders": {
+                    "count": {
+                        "type": "num"
+                    }
+                }
+            }
+        }"#;
+        let result = TranslationParser::parse_arb(arb).unwrap();
+        assert_eq!(
+            result.get("itemCount"),
+            Some(&"{count, plural, =0{no items} =1{1 item} other{{count} items}}".to_string())
+        );
+        assert!(result.get("@itemCount").is_none());
     }
 }
