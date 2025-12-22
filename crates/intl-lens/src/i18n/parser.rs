@@ -606,9 +606,9 @@ mod tests {
         assert_eq!(result.get("helloWorld"), Some(&"Hello World!".to_string()));
         assert_eq!(result.get("greeting"), Some(&"Hello {name}".to_string()));
         // Metadata keys should be filtered out
-        assert!(result.get("@@locale").is_none());
-        assert!(result.get("@helloWorld").is_none());
-        assert!(result.get("@greeting").is_none());
+        assert!(!result.contains_key("@@locale"));
+        assert!(!result.contains_key("@helloWorld"));
+        assert!(!result.contains_key("@greeting"));
     }
 
     #[test]
@@ -629,6 +629,6 @@ mod tests {
             result.get("itemCount"),
             Some(&"{count, plural, =0{no items} =1{1 item} other{{count} items}}".to_string())
         );
-        assert!(result.get("@itemCount").is_none());
+        assert!(!result.contains_key("@itemCount"));
     }
 }

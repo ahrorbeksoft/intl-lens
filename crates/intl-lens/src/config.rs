@@ -118,7 +118,8 @@ fn default_key_style() -> KeyStyle {
 fn default_function_patterns() -> Vec<String> {
     vec![
         // JavaScript/TypeScript patterns
-        r#"(?:^|[^\w])t\s*\(\s*["']([^"']+)["']"#.to_string(),
+        // Match t() but not .post(), .get(), .put(), .delete(), etc.
+        r#"(?:^|[^\w.])t\s*\(\s*["']([^"']+)["']"#.to_string(),
         r#"i18n\.t\s*\(\s*["']([^"']+)["']"#.to_string(),
         r#"useTranslation\s*\(\s*\)\s*.*?t\s*\(\s*["']([^"']+)["']"#.to_string(),
         r#"\$t\s*\(\s*["']([^"']+)["']"#.to_string(),
@@ -136,7 +137,7 @@ fn default_function_patterns() -> Vec<String> {
         // Flutter/Dart patterns - easy_localization
         r#"['"]([^'"]+)['"]\s*\.tr\("#.to_string(),
         r#"['"]([^'"]+)['"]\s*\.tr\(\)"#.to_string(),
-        r#"(?:^|[^\w])tr\(\s*['"]([^'"]+)['"]"#.to_string(),
+        r#"(?:^|[^\w.])tr\(\s*['"]([^'"]+)['"]"#.to_string(),
         r#"context\.tr\(\s*['"]([^'"]+)['"]"#.to_string(),
         r#"['"]([^'"]+)['"]\s*\.plural\("#.to_string(),
         // Flutter/Dart patterns - flutter_i18n

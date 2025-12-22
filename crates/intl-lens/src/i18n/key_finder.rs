@@ -98,7 +98,8 @@ impl Default for KeyFinder {
 fn default_patterns() -> Vec<String> {
     vec![
         // JavaScript/TypeScript patterns
-        r#"(?:^|[^\w])t\s*\(\s*["']([^"']+)["']"#.to_string(),
+        // Match t() but not .post(), .get(), .put(), .delete(), etc.
+        r#"(?:^|[^\w.])t\s*\(\s*["']([^"']+)["']"#.to_string(),
         r#"i18n\.t\s*\(\s*["']([^"']+)["']"#.to_string(),
         r#"\$t\s*\(\s*["']([^"']+)["']"#.to_string(),
         r#"formatMessage\s*\(\s*\{\s*id:\s*["']([^"']+)["']"#.to_string(),
@@ -106,7 +107,7 @@ fn default_patterns() -> Vec<String> {
         // Flutter/Dart patterns - easy_localization
         r#"['"]([^'"]+)['"]\s*\.tr\("#.to_string(),
         r#"['"]([^'"]+)['"]\s*\.tr\(\)"#.to_string(),
-        r#"(?:^|[^\w])tr\(\s*['"]([^'"]+)['"]"#.to_string(),
+        r#"(?:^|[^\w.])tr\(\s*['"]([^'"]+)['"]"#.to_string(),
         r#"context\.tr\(\s*['"]([^'"]+)['"]"#.to_string(),
         r#"['"]([^'"]+)['"]\s*\.plural\("#.to_string(),
         // Flutter/Dart patterns - flutter_i18n
@@ -230,5 +231,45 @@ mod tests {
         let keys = finder.find_keys(content);
         assert_eq!(keys.len(), 1);
         assert_eq!(keys[0].key, "greeting");
+    }
+
+    #[test]
+    fn test_should_not_match_api_methods() {
+        let finder = KeyFinder::default();
+        // Should NOT match .post(), .get(), .put(), .delete(), .patch(), .request()
+        let test_cases = vec![
+            r#"apiClient.post('/api/products')"#,
+            r#"client.get('/api/users')"#,
+            r#"http.put('/api/update')"#,
+            r#"axios.delete('/api/remove')"#,
+            r#"fetch.request('/api/data')"#,
+            r#"this.httpClient.get('/users')"#,
+            r#"await api.post('/endpoint')"#,
+            // More realistic cases
+            r#"const response = await apiClient.post('/api/products', data);"#,
+            r#"return this.http.get('/api/users');"#,
+            r#"apiClient.put('/api/update', { id: 1 });"#,
+            // Edge cases that should NOT match
+            r#"transport('/some/path')"#,
+            r#"contrast('/api/test')"#,
+        ];
+        
+        for content in test_cases {
+            let keys = finder.find_keys(content);
+            assert_eq!(keys.len(), 0, "Should not match: {} but got {:?}", content, keys.iter().map(|k| &k.key).collect::<Vec<_>>());
+        }
+    }
+
+    #[test]
+    fn test_should_match_t_but_not_method_ending_with_t() {
+        let finder = KeyFinder::default();
+        // Should match t() but not .post(), .request(), etc.
+        let content = r#"
+            const msg = t("hello.world");
+            apiClient.post('/api/products');
+        "#;
+        let keys = finder.find_keys(content);
+        assert_eq!(keys.len(), 1);
+        assert_eq!(keys[0].key, "hello.world");
     }
 }
