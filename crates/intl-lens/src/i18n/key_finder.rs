@@ -253,10 +253,16 @@ mod tests {
             r#"transport('/some/path')"#,
             r#"contrast('/api/test')"#,
         ];
-        
+
         for content in test_cases {
             let keys = finder.find_keys(content);
-            assert_eq!(keys.len(), 0, "Should not match: {} but got {:?}", content, keys.iter().map(|k| &k.key).collect::<Vec<_>>());
+            assert_eq!(
+                keys.len(),
+                0,
+                "Should not match: {} but got {:?}",
+                content,
+                keys.iter().map(|k| &k.key).collect::<Vec<_>>()
+            );
         }
     }
 
