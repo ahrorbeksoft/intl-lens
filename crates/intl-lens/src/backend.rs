@@ -143,6 +143,11 @@ impl I18nBackend {
                 scheme: None,
                 pattern: None,
             },
+            DocumentFilter {
+                language: Some("svelte".to_string()),
+                scheme: None,
+                pattern: None,
+            },
         ]);
 
         let register_options = InlayHintRegistrationOptions {
